@@ -1,0 +1,105 @@
+services:
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - 3000:3000
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana.ini:/etc/grafana/grafana.ini
+    networks:
+      - grafana
+      - monitoring
+    depends_on:
+      - grafana-database
+      - prometheus
+    restart: unless-stopped
+
+  grafana-database:
+    image: postgres:16.2-alpine
+    environment:
+      - POSTGRES_USER=grafana
+      - POSTGRES_PASSWORD=grafana
+      - POSTGRES_DB=grafana
+    volumes:
+      - grafana-database:/var/lib/postgresql/data
+    networks:
+      - grafana
+    restart: always
+  
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - 9090:9090
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - monitoring
+    restart: always 
+    # entrypoint: /bin/sh
+    # command: -c "sleep infinity"
+  
+  git:
+    image: gitea/gitea:latest
+    container_name: gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    volumes:
+      - ./app.ini:/data/gitea/conf/app.ini
+      - gitea-data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "3030:3000"
+      - "2242:22"
+    networks:
+      - gitea
+      - monitoring
+    depends_on:
+      - git-database
+
+  git-database:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_USER=gitea
+      - POSTGRES_PASSWORD=gitea
+      - POSTGRES_DB=gitea
+    volumes:
+      - gitea-database:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - gitea
+  
+  reverse-proxy:
+    image: nginx:latest
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./reverse-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./reverse-proxy/mime.types:/etc/nginx/mime.types:ro
+      - ./reverse-proxy/logs:/etc/nginx/logs
+    networks:
+      - monitoring
+      - grafana
+      - gitea
+    restart: always
+    depends_on:
+      - grafana
+      - git
+
+volumes:
+  grafana-data:
+  grafana-database:
+  prometheus-data:
+  gitea-data:
+  gitea-database:
+
+networks:
+  monitoring:
+  grafana:
+  gitea:
